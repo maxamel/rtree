@@ -10,11 +10,11 @@ import java.util.List;
 
 import com.github.davidmoten.rtree.geometry.Geometry;
 
-public class SelectorMinimalOverlapArea implements Selector {
+public final class SelectorMinimalOverlapArea implements Selector {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T> Node<T> select(Geometry g, List<? extends Node<T>> nodes) {
+    public <T, S extends Geometry> Node<T, S> select(Geometry g, List<? extends Node<T, S>> nodes) {
         return min(
                 nodes,
                 compose(overlapAreaComparator(g.mbr(), nodes), areaIncreaseComparator(g.mbr()),

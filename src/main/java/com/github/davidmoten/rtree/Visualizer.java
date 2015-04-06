@@ -6,26 +6,24 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import javax.imageio.ImageIO;
-
+import com.github.davidmoten.rtree.geometry.Geometry;
 import com.github.davidmoten.rtree.geometry.Rectangle;
 import com.google.common.base.Optional;
 
 public final class Visualizer {
 
-    private final RTree<?> tree;
+    private final RTree<?, Geometry> tree;
     private final int width;
     private final int height;
     private final Rectangle view;
     private final int maxDepth;
 
-    Visualizer(RTree<?> tree, int width, int height, Rectangle view) {
+    Visualizer(RTree<?, Geometry> tree, int width, int height, Rectangle view) {
         this.tree = tree;
         this.width = width;
         this.height = height;
@@ -33,21 +31,21 @@ public final class Visualizer {
         this.maxDepth = calculateMaxDepth(tree.root());
     }
 
-    private static <R> int calculateMaxDepth(Optional<? extends Node<R>> root) {
+    private static <R, S extends Geometry> int calculateMaxDepth(Optional<? extends Node<R, S>> root) {
         if (!root.isPresent())
             return 0;
         else
             return calculateDepth(root.get(), 0);
     }
 
-    private static <R> int calculateDepth(Node<R> node, int depth) {
+    private static <R, S extends Geometry> int calculateDepth(Node<R, S> node, int depth) {
         if (node instanceof Leaf)
             return depth + 1;
         else
-            return calculateDepth(((NonLeaf<R>) node).children().get(0), depth + 1);
+            return calculateDepth(((NonLeaf<R, S>) node).children().get(0), depth + 1);
     }
 
-    public BufferedImage create() {
+    public BufferedImage createImage() {
         final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         final Graphics2D g = (Graphics2D) image.getGraphics();
         g.setBackground(Color.white);
@@ -61,7 +59,7 @@ public final class Visualizer {
         return image;
     }
 
-    private <T> List<RectangleDepth> getNodeDepthsSortedByDepth(Node<T> root) {
+    private <T, S extends Geometry> List<RectangleDepth> getNodeDepthsSortedByDepth(Node<T, S> root) {
         final List<RectangleDepth> list = getRectangleDepths(root, 0);
         Collections.sort(list, new Comparator<RectangleDepth>() {
 
@@ -73,17 +71,18 @@ public final class Visualizer {
         return list;
     }
 
-    private <T> List<RectangleDepth> getRectangleDepths(Node<T> node, int depth) {
+    private <T, S extends Geometry> List<RectangleDepth> getRectangleDepths(Node<T, S> node,
+            int depth) {
         final List<RectangleDepth> list = new ArrayList<RectangleDepth>();
         list.add(new RectangleDepth(node.geometry().mbr(), depth));
         if (node instanceof Leaf) {
-            final Leaf<T> leaf = (Leaf<T>) node;
-            for (final Entry<T> entry : leaf.entries()) {
+            final Leaf<T, S> leaf = (Leaf<T, S>) node;
+            for (final Entry<T, S> entry : leaf.entries()) {
                 list.add(new RectangleDepth(entry.geometry().mbr(), depth + 2));
             }
         } else {
-            final NonLeaf<T> n = (NonLeaf<T>) node;
-            for (final Node<T> child : n.children()) {
+            final NonLeaf<T, S> n = (NonLeaf<T, S>) node;
+            for (final Node<T, S> child : n.children()) {
                 list.addAll(getRectangleDepths(child, depth + 1));
             }
         }
@@ -113,11 +112,7 @@ public final class Visualizer {
     }
 
     public void save(File file, String imageFormat) {
-        try {
-            ImageIO.write(create(), imageFormat, file);
-        } catch (final IOException e) {
-            throw new RuntimeException(e);
-        }
+        ImageSaver.save(createImage(), file, imageFormat);
     }
 
     public void save(String filename, String imageFormat) {

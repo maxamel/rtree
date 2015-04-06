@@ -1,9 +1,11 @@
 rtree
 =========
+<a href="https://travis-ci.org/davidmoten/rtree"><img src="https://travis-ci.org/davidmoten/rtree.svg"/></a><br/>
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.github.davidmoten/rtree/badge.svg?style=flat)](https://maven-badges.herokuapp.com/maven-central/com.github.davidmoten/rtree)
 
 In-memory immutable 2D [R-tree](http://en.wikipedia.org/wiki/R-tree) implementation in java using [RxJava Observables](https://github.com/ReactiveX/RxJava) for reactive processing of search results. 
 
-Status: *released to Maven Central, ensure you use at least 0.4 to get fix for #7*
+Status: *released to Maven Central, ensure you use at least 0.4 to get fix for* [#7](https://github.com/davidmoten/rtree/issues/7)
 
 An [R-tree](http://en.wikipedia.org/wiki/R-tree) is a commonly used spatial index.
 
@@ -16,8 +18,6 @@ it is in [Leaf.java](src/main/java/com/github/davidmoten/rtree/Leaf.java) and [N
 [Backpressure](https://github.com/ReactiveX/RxJava/wiki/Backpressure) support required some complexity because effectively a
 bookmark needed to be kept for a position in the tree and returned to later to continue traversal. An immutable stack containing
  the node and child index of the path nodes came to the rescue here and recursion was abandoned in favour of looping to prevent stack overflow (unfortunately java doesn't support tail recursion!).
-
-Continuous integration with Travis: <a href="https://travis-ci.org/davidmoten/rtree"><img src="https://api.travis-ci.org/davidmoten/rtree.svg"/></a>
 
 Maven site reports are [here](http://davidmoten.github.io/rtree/index.html) including [javadoc](http://davidmoten.github.io/rtree/apidocs/index.html).
 
@@ -37,17 +37,18 @@ Features
 * supports [backpressure](https://github.com/ReactiveX/RxJava/wiki/Backpressure)
 * JMH benchmarks
 * visualizer included
+* 100% unit test [code coverage](http://davidmoten.github.io/rtree/cobertura/index.html) 
 * R*-tree performs 425,000 searches/second returning 22 entries from a tree of 38,377 Greek earthquake locations on i7-920@2.67Ghz (maxChildren=4, minChildren=4). Insert at 135,000 entries per second.
 * requires java 1.6 or later
 
-Number of points = 1000, max children per node 8, Quadratic split: 
+Number of points = 1000, max children per node 8: 
 
-<img src="src/docs/quad-1000-8.png?raw=true"/>
+| Quadratic split | R*-tree split |
+| :-------------: | :-----------: |
+| <img src="src/docs/quad-1000-8.png?raw=true" /> | <img src="src/docs/star-1000-8.png?raw=true" /> |
 
-Number of points = 1000, max children per node 8, R*-tree split. Notice that there is little overlap compared to the 
+Notice that there is little overlap in the R*-tree split compared to the 
 Quadratic split. This should provide better search performance (and in general benchmarks show this).
-
-<img src="src/docs/star-1000-8.png?raw=true"/>
 
 Getting started
 ----------------
@@ -57,7 +58,7 @@ Add this maven dependency to your pom.xml:
 <dependency>
   <groupId>com.github.davidmoten</groupId>
   <artifactId>rtree</artifactId>
-  <version>0.4</version>
+  <version>0.5.8</version>
 </dependency>
 ```
 ###Instantiate an R-Tree
@@ -67,19 +68,26 @@ Use the static builder methods on the ```RTree``` class:
 // create an R-tree using Quadratic split with max
 // children per node 4, min children 2 (the threshold
 // at which members are redistributed)
-RTree<String> tree = RTree.create();
+RTree<String, Geometry> tree = RTree.create();
 ```
 You can specify a few parameters to the builder, including *minChildren*, *maxChildren*, *splitter*, *selector*:
 
 ```java
-RTree<String> tree = RTree.minChildren(3).maxChildren(6).create();
+RTree<String, Geometry> tree = RTree.minChildren(3).maxChildren(6).create();
+```
+###Generic typing
+
+If for instance you know that the entry geometry is always ```Point``` then create an ```RTree``` specifying that generic type to gain more type safety:
+
+```java
+RTree<String, Point> tree = RTree.create();
 ```
 
 ###R*-tree
 If you'd like an R*-tree (which uses a topological splitter on minimal margin, overlap area and area and a selector combination of minimal area increase, minimal overlap, and area):
 
 ```
-RTree<String> tree = RTree.star().maxChildren(6).create();
+RTree<String, Geometry> tree = RTree.star().maxChildren(6).create();
 ```
 
 See benchmarks below for some of the performance differences.
@@ -95,13 +103,16 @@ extension of the item. The ``Geometries`` builder provides these factory methods
 To add an item to an R-tree:
 
 ```java
-RTree<T> tree = RTree.create();
+RTree<T,Geometry> tree = RTree.create();
 tree = tree.add(item, Geometries.point(10,20));
 ```
 or 
 ```java
-tree = tree.add(Enry.entry(item, Geometries.point(10,20));
+tree = tree.add(Entry.entry(item, Geometries.point(10,20));
 ```
+
+*Important note:* being an immutable data structure, calling ```tree.add(item, geometry)``` does nothing to ```tree```, 
+it returns a new ```RTree``` containing the addition. Make sure you use the result of the ```add```!
 
 ###Remove an item in the R-tree
 To remove an item from an R-tree, you need to match the item and its geometry:
@@ -114,15 +125,18 @@ or
 tree = tree.delete(entry);
 ```
 
+*Important note:* being an immutable data structure, calling ```tree.delete(item, geometry)``` does nothing to ```tree```, 
+it returns a new ```RTree``` without the deleted item. Make sure you use the result of the ```delete```!
+
 ###Custom geometries
 You can also write your own implementation of [```Geometry```](src/main/java/com/github/davidmoten/rtree/geometry/Geometry.java). An implementation of ```Geometry``` needs to specify methods to:
 
-* measure distance to a rectangle (0 means they intersect)
 * check intersection with a rectangle (you can reuse the distance method here if you want but it might affect performance)
 * provide a minimum bounding rectangle
 * implement ```equals``` and ```hashCode``` for consistent equality checking
+* measure distance to a rectangle (0 means they intersect). Note that this method is only used for search within a distance so implementing this method is *optional*. If you don't want to implement this method just throw a ```RuntimeException```.
 
-For the R-tree to be well-behaved, the distance function needs to satisfy these properties:
+For the R-tree to be well-behaved, the distance function if implemented needs to satisfy these properties:
 
 * ```distance(r) >= 0 for all rectangles r```
 * ```if rectangle r1 contains r2 then distance(r1)<=distance(r2)```
@@ -134,30 +148,66 @@ On average search is ```O(log(n))``` but worst case is ```O(n)```.
 
 Search methods return ```Observable``` sequences:
 ```java
-Observable<Entry<T>> results = tree.search(Geometries.rectangle(0,0,2,2));
+Observable<Entry<T, Geometry>> results =
+    tree.search(Geometries.rectangle(0,0,2,2));
 ```
 or search for items within a distance from the given geometry:
 ```java
-Observable<Entry<T>> results = tree.search(Geometries.rectangle(0,0,2,2),5.0);
+Observable<Entry<T, Geometry>> results =
+    tree.search(Geometries.rectangle(0,0,2,2),5.0);
 ```
 To return all entries from an R-tree:
 ```java
-Observable<Entry<T>> results = tree.entries();
+Observable<Entry<T, Geometry>> results = tree.entries();
 ```
 
+Search with a custom geometry
+-----------------------------------
+Suppose you make a custom geometry like ```Polygon``` and you want to search an ```RTree<String,Point>``` for points inside the polygon. This is how you do it:
+
+```java
+RTree<String, Point> tree = RTree.create();
+Func2<Point, Polygon, Boolean> pointInPolygon = ...
+Polygon polygon = ...
+...
+entries = tree.search(polygon, pointInPolygon);
+```
+The key is that you need to supply the ```intersects``` function (```pointInPolygon```) to the search. It is on you to implement that for all types of geometry present in the ```RTree```. This is one reason that the generic ```Geometry``` type was added in *rtree* 0.5 (so the type system could tell you what geometry types you needed to calculate intersection for) .
+
+Search with a custom geometry and maxDistance
+--------------------------------------------------
+As per the example above to do a proximity search you need to specify how to calculate distance between the geometry you are searching and the entry geometries:
+
+```java
+RTree<String, Point> tree = RTree.create();
+Func2<Point, Polygon, Boolean> distancePointToPolygon = ...
+Polygon polygon = ...
+...
+entries = tree.search(polygon, 10, distancePointToPolygon);
+```
 Example
 --------------
 ```java
 import com.github.davidmoten.rtree.RTree;
 import static com.github.davidmoten.rtree.geometry.Geometries.*;
 
-RTree<String> tree = RTree.maxChildren(5).create();
+RTree<String, Point> tree = RTree.maxChildren(5).create();
 tree = tree.add("DAVE", point(10, 20))
            .add("FRED", point(12, 25))
            .add("MARY", point(97, 125));
  
-Observable<Entry<String>> entries = tree.search(Rectangle.create(8, 15, 30, 35));
+Observable<Entry<String, Point>> entries =
+    tree.search(Rectangle.create(8, 15, 30, 35));
 ```
+
+Searching by distance on lat longs
+------------------------------------
+See [LatLongExampleTest.java](src/test/java/com/github/davidmoten/rtree/LatLongExampleTest.java) for an example. The example depends on [*grumpy-core*](https://github.com/davidmoten/grumpy) artifact which is also on Maven Central.
+
+Another lat long example searching geo circles 
+------------------------------------------------
+See [LatLongExampleTest.testSearchLatLongCircles()](src/test/java/com/github/davidmoten/rtree/LatLongExampleTest.java) for an example of searching circles around geographic points (using great circle distance).
+
 
 What do I do with the Observable thing?
 -------------------------------------------
@@ -170,8 +220,10 @@ import rx.Observable;
 import rx.functions.*;
 import rx.schedulers.Schedulers;
 
-Func1<Entry<String>, Character> firstCharacter = entry -> entry.value().charAt(0);
-Func2<Character,Character,Character> firstAlphabetically = (x,y) -> x <=y ? x : y;
+Func1<Entry<String, Geometry>, Character> firstCharacter =
+    entry -> entry.value().charAt(0);
+Func2<Character,Character,Character> firstAlphabetically 
+    = (x,y) -> x <=y ? x : y;
 
 Character result = 
     tree.search(Geometries.rectangle(8, 15, 30, 35))
@@ -205,7 +257,8 @@ How do I just get an Iterable back from a search?
 If you are not familiar with the Observable API and want to skip the reactive stuff then here's how to get an ```Iterable``` from a search:
 
 ```java
-Iterable<T> it = tree.search(Geometries.point(4,5)).toBlocking().toIterable();
+Iterable<T> it = tree.search(Geometries.point(4,5))
+                     .toBlocking().toIterable();
 ```
 
 Backpressure
@@ -216,7 +269,8 @@ Visualizer
 --------------
 To visualize the R-tree in a PNG file of size 600 by 600 pixels just call:
 ```java
-tree.visualize(600,600).save("target/mytree.png");
+tree.visualize(600,600)
+    .save("target/mytree.png");
 ```
 The result is like the images in the Features section above.
 
@@ -301,3 +355,5 @@ c.g.d.r.BenchmarksRTree.rStarTreeSearchOfGreekDataPointsMaxChildren010          
 c.g.d.r.BenchmarksRTree.rStarTreeSearchOfGreekDataPointsMaxChildren010WithBackpressure    thrpt       10  112927.452     2068.581  ops/s
 c.g.d.r.BenchmarksRTree.rStarTreeSearchOfGreekDataPointsMaxChildren032                    thrpt       10  279709.070     4622.236  ops/s
 c.g.d.r.BenchmarksRTree.rStarTreeSearchOfGreekDataPointsMaxChildren128                    thrpt       10  208791.404     2751.306  ops/s
+```
+

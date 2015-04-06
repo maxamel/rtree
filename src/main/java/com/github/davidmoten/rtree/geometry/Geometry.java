@@ -1,11 +1,10 @@
 package com.github.davidmoten.rtree.geometry;
 
-import com.github.davidmoten.rtree.Entry;
 
 /**
  * A geometrical region that represents an Entry spatially. It is recommended
  * that implementations of this interface implement equals() and hashCode()
- * appropriately that {@link Entry} equality checks work as expected.
+ * appropriately that entry equality checks work as expected.
  */
 public interface Geometry {
 
@@ -33,18 +32,11 @@ public interface Geometry {
     double distance(Rectangle r);
 
     /**
-     * Returns true if and only if the geometry intersects the given rectangle.
-     * Ensure is consistent with distance(Rectangle).
-     * 
-     * @param r rectangle to test intersection with
-     * @return true if and only if this and r intersect
-     */
-    boolean intersects(Rectangle r);
-
-    /**
      * Returns the minimum bounding rectangle of this geometry.
      * 
      * @return minimum bounding rectangle
      */
     Rectangle mbr();
+
+    boolean intersects(Rectangle r);
 }
